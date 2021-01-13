@@ -6,7 +6,20 @@ import sys, os
 LENGTH_PREDS = ['%length', 'length']
 SUM_PREDS = ['%sum', 'sum']
 SIZE_PREDS = ['%size']
+PROD_PREDS = ['prod']
 
+def is_recursive_adt(dt):
+    if not dt.kind() == z3.Z3_DATATYPE_SORT:
+        return False
+    n = dt.num_constructors()
+    for i in range(n):
+        c = dt.constructor(i)
+        num_args = c.arity()
+        for j in range(num_args):
+            arg_sort = c.domain(j)
+            if arg_sort == dt:
+                return True
+    return False
 #from horndb
 def ground_quantifier(qexpr):
     body = qexpr.body()
@@ -52,48 +65,15 @@ def contains_func_app(exp, func):
             return True
     return False
 
-def create_length_rf(list_sort, ret_sort, ctx):
-    assert(list_sort.num_constructors() == 2)
-    if list_sort.constructor(0).arity() == 0:
-        nil_cons = list_sort.constructor(0)
-        nil_recog = list_sort.recognizer(0)
-        ins_cons = list_sort.constructor(1)
-        i = 1
-    else:
-        ins_cons = list_sort.constructor(0)
-        nil_cons = list_sort.constructor(1)
-        nil_recog = list_sort.recognizer(1)
-        i = 0
-    assert(nil_cons.arity() == 0)
-    assert(ins_cons.arity() == 2)
-    if ins_cons.domain(1) == list_sort:
-        tail_sel = list_sort.accessor(i, 1)
-    else:
-        tail_sel = list_sort.accessor(i, 0)
-
-    length = z3.RecFunction('length', list_sort, ret_sort)
-    x = z3.Const('x', list_sort)
-    z3.RecAddDefinition(length, x, z3.If(nil_recog(x), 0, 1 + length(tail_sel(x)), ctx=ctx))
-    return length
-
-def create_sum_rf(sort, ret_sort, ctx):
-    if "list" in sort.name().lower():
-        return create_sum_list_rf(sort, ret_sort, ctx)
-    elif "tree" in sort.name().lower():
-        return create_sum_tree_rf(sort, ret_sort, ctx)
-    else:
-        assert(False)
 def get_tree_csr(tree_sort):
     assert(tree_sort.num_constructors() == 2)
     if tree_sort.constructor(0).arity() == 0:
         nil_cons = tree_sort.constructor(0)
-        nil_recog = tree_sort.recognizer(0)
         ins_cons = tree_sort.constructor(1)
         i = 1
     else:
         ins_cons = tree_sort.constructor(0)
         nil_cons = tree_sort.constructor(1)
-        nil_recog = tree_sort.recognizer(1)
         i = 0
     assert(nil_cons.arity() == 0)
     assert(ins_cons.arity() == 3)
@@ -109,35 +89,17 @@ def get_tree_csr(tree_sort):
         lc_sel = tree_sort.accessor(i, 0)
         rc_sel = tree_sort.accessor(i, 1)
         val_sel = tree_sort.accessor(i, 2)
-    return nil_recog, lc_sel, rc_sel, val_sel
+    return nil_cons, lc_sel, rc_sel, val_sel
 
-def create_size_rf(tree_sort, ret_sort, ctx):
-    size = z3.RecFunction('size', tree_sort, ret_sort)
-    x = z3.Const('x', tree_sort)
-    nil_recog, lc_sel, rc_sel, val_sel = get_tree_csr(tree_sort)
-    assert(val_sel.range() == ret_sort)
-    z3.RecAddDefinition(size, x, z3.If(nil_recog(x), 0, 1 + size(lc_sel(x)) + size(rc_sel(x)), ctx=ctx))
-    return size
-
-
-def create_sum_tree_rf(tree_sort, ret_sort, ctx):
-    sum = z3.RecFunction('sum', tree_sort, ret_sort)
-    x = z3.Const('x', tree_sort)
-    nil_recog, lc_sel, rc_sel, val_sel = get_tree_csr(tree_sort)
-    z3.RecAddDefinition(sum, x, z3.If(nil_recog(x), 0, val_sel(x) + sum(lc_sel(x)) + sum(rc_sel(x)), ctx=ctx))
-    return sum
-
-def create_sum_list_rf(list_sort, ret_sort, ctx):
+def get_list_csr(list_sort):
     assert(list_sort.num_constructors() == 2)
     if list_sort.constructor(0).arity() == 0:
         nil_cons = list_sort.constructor(0)
-        nil_recog = list_sort.recognizer(0)
         ins_cons = list_sort.constructor(1)
         i = 1
     else:
         ins_cons = list_sort.constructor(0)
         nil_cons = list_sort.constructor(1)
-        nil_recog = list_sort.recognizer(1)
         i = 0
     assert(nil_cons.arity() == 0)
     assert(ins_cons.arity() == 2)
@@ -147,10 +109,51 @@ def create_sum_list_rf(list_sort, ret_sort, ctx):
     else:
         tail_sel = list_sort.accessor(i, 0)
         head_sel = list_sort.accessor(i, 1)
+    return nil_cons, head_sel, tail_sel
 
+def create_length_rf(list_sort, ret_sort, ctx):
+    length = z3.RecFunction('length', list_sort, ret_sort)
+    x = z3.Const('x', list_sort)
+    nil_cons, head_sel, tail_sel = get_list_csr(list_sort)
+    z3.RecAddDefinition(length, x, z3.If(x == nil_cons(), 0, 1 + length(tail_sel(x)), ctx=ctx))
+    return length
+
+def create_prod_rf(list_sort, ret_sort, ctx):
+    prod = z3.RecFunction('prod', list_sort, ret_sort)
+    x = z3.Const('x', list_sort)
+    nil_cons, head_sel, tail_sel = get_list_csr(list_sort)
+    z3.RecAddDefinition(prod, x, z3.If(x == nil_cons(), 0, head_sel(x) * prod(tail_sel(x)), ctx=ctx))
+    return prod
+
+def create_sum_rf(sort, ret_sort, ctx):
+    if "list" in sort.name().lower():
+        return create_sum_list_rf(sort, ret_sort, ctx)
+    elif "tree" in sort.name().lower():
+        return create_sum_tree_rf(sort, ret_sort, ctx)
+    else:
+        assert(False)
+
+def create_size_rf(tree_sort, ret_sort, ctx):
+    size = z3.RecFunction('size', tree_sort, ret_sort)
+    x = z3.Const('x', tree_sort)
+    nil_cons, lc_sel, rc_sel, val_sel = get_tree_csr(tree_sort)
+    assert(val_sel.range() == ret_sort)
+    z3.RecAddDefinition(size, x, z3.If(x == nil_cons(), 0, 1 + size(lc_sel(x)) + size(rc_sel(x)), ctx=ctx))
+    return size
+
+
+def create_sum_tree_rf(tree_sort, ret_sort, ctx):
+    sum = z3.RecFunction('sum', tree_sort, ret_sort)
+    x = z3.Const('x', tree_sort)
+    nil_cons, lc_sel, rc_sel, val_sel = get_tree_csr(tree_sort)
+    z3.RecAddDefinition(sum, x, z3.If(x == nil_cons(), 0, val_sel(x) + sum(lc_sel(x)) + sum(rc_sel(x)), ctx=ctx))
+    return sum
+
+def create_sum_list_rf(list_sort, ret_sort, ctx):
     sum = z3.RecFunction('sum', list_sort, ret_sort)
     x = z3.Const('x', list_sort)
-    z3.RecAddDefinition(sum, x, z3.If(nil_recog(x), 0, head_sel(x) + sum(tail_sel(x)), ctx=ctx))
+    nil_cons, head_sel, tail_sel = get_list_csr(list_sort)
+    z3.RecAddDefinition(sum, x, z3.If(x == nil_cons(), 0, head_sel(x) + sum(tail_sel(x)), ctx=ctx))
     return sum
 
 #An rf tuple contains a rf, the list of predicates that define it, and a function that creates the z3 rf
@@ -169,6 +172,7 @@ class rf_tuple():
 LENGTH_RF = rf_tuple('length', LENGTH_PREDS, create_length_rf)
 SUM_RF = rf_tuple('sum', SUM_PREDS, create_sum_rf)
 SIZE_RF = rf_tuple('size', SIZE_PREDS, create_size_rf)
+PROD_RF = rf_tuple('prod', PROD_PREDS, create_prod_rf)
 
 class Preds():
     def __init__(self, fname):
@@ -182,10 +186,11 @@ class Preds():
         self._length_fun = None
         self._sum_fun = None
         self._assertions = self._fp.get_assertions()
-        self._rf_tuples = [LENGTH_RF, SUM_RF, SIZE_RF]
+        self._rf_tuples = [LENGTH_RF, SUM_RF, SIZE_RF, PROD_RF]
         assert(len(self._fp.get_rules()) == 0)
 
     def conjoin_all_rf(self):
+        self.populate_rf_preds()
         for f in self._rf_tuples:
             res = self.add_rf(f._PREDS, f._create_rf)
             if not res is None:
@@ -204,36 +209,6 @@ class Preds():
                 assert(adt_sort.kind() == z3.Z3_DATATYPE_SORT)
                 return create_rf(adt_sort, ret_sort, self._ctx)
         return None
-
-    # def add_sum_rf(self):
-    #     list_sort = None
-    #     for pred in self._preds:
-    #         if pred.name() in SUM_PREDS:
-    #             assert(pred.arity() == 2)
-    #             if pred.domain(0).kind() == z3.Z3_DATATYPE_SORT:
-    #                 list_sort = pred.domain(0)
-    #                 ret_sort = pred.domain(1)
-    #             else:
-    #                 list_sort = pred.domain(1)
-    #                 ret_sort = pred.domain(0)
-    #             assert(list_sort.kind() == z3.Z3_DATATYPE_SORT)
-    #     if list_sort is not None:
-    #         self._sum_fun = create_sum_rf(list_sort, ret_sort, self._ctx)
-
-    # def add_length_rf(self):
-    #     list_sort = None
-    #     for pred in self._preds:
-    #         if pred.name() in LENGTH_PREDS:
-    #             assert(pred.arity() == 2)
-    #             if pred.domain(1).kind() == z3.Z3_DATATYPE_SORT:
-    #                 list_sort = pred.domain(1)
-    #                 ret_sort = pred.domain(0)
-    #             else:
-    #                 list_sort = pred.domain(0)
-    #                 ret_sort = pred.domain(1)
-    #             assert(list_sort.kind() == z3.Z3_DATATYPE_SORT)
-    #     if list_sort is not None:
-    #         self._length_fun = create_length_rf(list_sort, ret_sort, self._ctx)
 
     #Let p(a, b) be a predicate in RF_PREDS.
     #This method will conjoin each occurrence of p(a, b) with rf_def(a) = b
@@ -277,21 +252,17 @@ class Preds():
                 new_assertions.append(a)
         self._assertions = new_assertions
 
-    # def conjoin_sum(self):
-    #     if self._sum_fun is None:
-    #         return
-    #     self.conjoin_rf(self._sum_fun, SUM_PREDS)
+    def bench_str(self):
+        import io
 
-    def print_bench(self):
+        out = io.StringIO()
         new_fp = z3.Fixedpoint(ctx = self._ctx)
         for f in self._assertions:
             new_fp.add(f)
-        print(new_fp)
-
-    # def conjoin_length(self):
-    #     if self._length_fun is None:
-    #         return
-    #     self.conjoin_rf(self._length_fun, LENGTH_PREDS)
+        out.write("(set-logic HORN)\n")
+        out.write(str(new_fp))
+        out.write("(check-sat)")
+        return out.getvalue()
 
     #fetch all clauses of the form p1(args1) ==> p2(args2) where set(args2) = set(args1)
     def get_redundant_clauses(self):
@@ -334,6 +305,10 @@ class Preds():
                     head = body.arg(1)
                     tail = body.arg(0)
                     if z3.is_app(head) and head.decl().name() == pred.name() and head.decl().arity() == 2:
+                        arg1 = head.arg(0).sort()
+                        arg2 = head.arg(1).sort()
+                        if not (is_recursive_adt(arg1) or is_recursive_adt(arg2)):
+                            continue
                         tail_preds = list(dict.fromkeys(get_preds(tail, self._ctx)))
                         if len(tail_preds) == 1:
                             if tail_preds[0] == pred:
@@ -364,33 +339,31 @@ class Preds():
             if adt_s not in res:
                 res.add(adt_s)
 
-def processDir (root, preds, adts):
+def processDir (root):
     '''Recursively process all files in the root directory'''
+    os.mkdir("bench")
     for root, dirs, files in os.walk(root):
         for name in files:
-            processFile (os.path.join(root, name), preds, adts)
+            _, folder_name = os.path.split(root)
+            bench_name = folder_name + "-" +name
+            out_file = open("bench/"+bench_name, 'w+')
+            processFile(os.path.join(root, name), out_file)
 
-def processFile(fname, preds, adts):
+def processFile(fname, out_file = sys.stdout):
     p = Preds(fname)
-    p.populate_rf_preds()
-    p.get_adt_cons(adts)
     p.conjoin_all_rf()
-    p.print_bench()
-    for f in p._rf_preds:
-        if f not in preds:
-            preds.add(f)
-            print(fname, f)
+    out_file.write(p.bench_str())
 
 def main():
-    preds = set()
-    adts = set()
     arg = sys.argv[1]
     if os.path.isfile(arg):
-        processFile(arg, preds, adts)
+        path, fname = os.path.split(arg)
+        _, foldername = os.path.split(path)
+        new_fname = foldername + "-" + fname
+        f = open(new_fname, 'w+')
+        processFile(arg, out_file=f)
     else:
-        processDir(arg, preds, adts)
-    print(preds)
-    print(adts)
+        processDir(arg)
     return 0
 
 
