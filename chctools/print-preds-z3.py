@@ -197,7 +197,7 @@ class Preds():
                 self.conjoin_rf(res, f._PREDS)
 
     def add_rf(self, RF_PREDS, create_rf):
-        for pred in self._preds:
+        for pred in self._rf_preds:
             if pred.name() in RF_PREDS:
                 assert(pred.arity() == 2)
                 if pred.domain(0).kind() == z3.Z3_DATATYPE_SORT:
