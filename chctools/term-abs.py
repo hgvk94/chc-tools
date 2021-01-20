@@ -1,7 +1,15 @@
 import z3 # type: ignore
 import sys, os
-#'append', 'incsome', '%some', '%size', '%append',  'some-rest',  'inc&back',  '%take_some_rest', 'sum', 'prod', 'some', '%inc', '%take_some', 'inck', '%sum',  'back', 'pushback', 'inc'
 
+LENGTH_PREDS = ['%length', 'length']
+SUM_PREDS = ['%sum', 'sum']
+SIZE_PREDS = ['%size']
+PROD_PREDS = ['prod']
+RF_PREDS = dict()
+RF_PREDS['length'] = LENGTH_PREDS
+RF_PREDS['sum'] = SUM_PREDS
+RF_PREDS['size'] = SIZE_PREDS
+RF_PREDS['prod'] = PROD_PREDS
 
 def is_recursive_adt(dt):
     if not dt.kind() == z3.Z3_DATATYPE_SORT:
@@ -100,7 +108,7 @@ class abs_pred():
         new_args = [*args, *new_vars]
         return self._new_pred(*new_args)
 
-    def mk_body(self, args, new_vars):
+    def mk_body(self, args, new_vars, rf_pred_map):
         assert(len(args) == len(self._original_args))
         assert(len(new_vars) == len(self._abstractions))
         body = []
@@ -109,6 +117,9 @@ class abs_pred():
             rhs = new_vars[j]
             eq = lhs == rhs
             body.append(eq)
+            rf_pred = rf_pred_map[f]
+            lit = rf_pred(args[i], rhs)
+            body.append(lit)
         return body
 
 
@@ -126,6 +137,7 @@ class Term_abs():
         for a in self._assertions:
             self._rfs.extend(get_rfs(a, self._ctx))
         self._rfs = list(dict.fromkeys(self._rfs))
+        self._rf_pred_map = dict()
     def bench_str(self):
         import io
 
@@ -211,9 +223,22 @@ class Term_abs():
                 new_pred = abs_pred(p, self._rfs, self._ctx)
                 self._new_preds.append(new_pred)
 
+    def populate_rf_pred_map(self):
+        if self._rf_pred_map:
+            return
+        for f in self._rfs:
+            found = False
+            for p in self._rf_preds:
+                if p.name() in RF_PREDS[f.name()]:
+                    self._rf_pred_map[f] = p
+                    found = True
+                    break
+            assert(found)
+
     def do_term_abs(self):
         self.populate_rf_preds()
         self.populate_new_preds()
+        self.populate_rf_pred_map()
         new_assertions = []
         for a in self._assertions:
             qbody, vs = ground_quantifier(a)
@@ -227,7 +252,7 @@ class Term_abs():
                         new_var = z3.FreshConst(f)
                         new_vars.append(new_var)
                     new_qbody = new_pred.mk_new_pred(qbody.args, new_vars)
-                    literals = new_pred.mk_body(qbody.args, new_vars)
+                    literals = new_pred.mk_body(qbody.args, new_vars, self._rf_pred_map)
                     if literals:
                         new_assertion = z3.ForAll([vs, new_vars], z3.And(*literals, new_qbody))
                         new_assertions.append(new_assertion)
@@ -249,7 +274,7 @@ class Term_abs():
                         new_var = z3.FreshConst(f)
                         new_vars.append(new_var)
                     new_head_abs = new_head.mk_new_pred(head.children(), new_vars)
-                    extra_lits.extend(new_head.mk_body(head.children(), new_vars))
+                    extra_lits.extend(new_head.mk_body(head.children(), new_vars, self._rf_pred_map))
                 tail_children = []
                 if not z3.is_and(tail):
                     tail_children.append(tail)
@@ -267,7 +292,7 @@ class Term_abs():
                                 vars.append(new_var)
                             new_c_abs = new_c.mk_new_pred(c.children(), vars)
                             new_vars.extend(vars)
-                            extra_lits.extend(new_c.mk_body(c.children(), vars))
+                            extra_lits.extend(new_c.mk_body(c.children(), vars, self._rf_pred_map))
                             tail_preds.append(new_c_abs)
                         else:
                             tail_preds.append(c)
