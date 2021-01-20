@@ -216,11 +216,13 @@ class Preds():
         new_assertions = []
         for a in self._assertions:
             clause, vs = ground_quantifier(a)
+            #If the clause does not have a tail, it cannot be a RF
             if not z3.is_implies(clause):
                 new_assertions.append(a)
                 continue
             head = clause.arg(1)
             tail = clause.arg(0)
+            #Skip clauses whose head is RF
             if z3.is_app(head) and head.decl().name() in RF_PREDS:
                 new_assertions.append(a)
                 continue
