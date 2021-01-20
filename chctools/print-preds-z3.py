@@ -349,12 +349,15 @@ def processDir (root):
     os.mkdir("bench")
     for root, dirs, files in os.walk(root):
         for name in files:
+            if not name.endswith(".smt2"):
+                continue
             _, folder_name = os.path.split(root)
             bench_name = folder_name + "-" +name
             out_file = open("bench/"+bench_name, 'w+')
             processFile(os.path.join(root, name), out_file)
 
 def processFile(fname, out_file = sys.stdout):
+    print("processing" + fname)
     p = Preds(fname)
     p.conjoin_all_rf()
     out_file.write(p.bench_str())

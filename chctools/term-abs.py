@@ -62,6 +62,16 @@ def contains_func_app(exp, func):
             return True
     return False
 
+#Check whether any of the unary rf in \p rfs can take as input
+#one of the arguments of p
+def contains_rf_arg(p, rfs, ctx):
+    for i in range(p.arity()):
+        d = p.domain(i)
+        for rf in rfs:
+            if rf.domain(0) == d:
+                return True
+    return False
+
 #Matches a predicate with a new abstract predicate
 #contains all the literals required for term abstraction
 class abs_pred():
@@ -77,7 +87,6 @@ class abs_pred():
                 for rf in rfs:
                     if rf.domain(0) == f:
                         self._abstractions.append((rf, i))
-        print(self._abstractions)
         domain = []
         domain.extend(self._original_args)
         domain.extend([f.range() for (f, _) in self._abstractions])
@@ -190,13 +199,21 @@ class Term_abs():
                 return p
         return None
 
+    def should_create_new_pred(self, p):
+        if p in self._rf_preds:
+            return False
+        if not contains_rf_arg(p, self._rfs, self._ctx):
+            return False
+        return True
+    def populate_new_preds(self):
+        for p in self._preds:
+            if self.should_create_new_pred(p):
+                new_pred = abs_pred(p, self._rfs, self._ctx)
+                self._new_preds.append(new_pred)
+
     def do_term_abs(self):
         self.populate_rf_preds()
-        for p in self._preds:
-            if p in self._rf_preds:
-                continue
-            new_pred = abs_pred(p, self._rfs, self._ctx)
-            self._new_preds.append(new_pred)
+        self.populate_new_preds()
         new_assertions = []
         for a in self._assertions:
             qbody, vs = ground_quantifier(a)
@@ -240,12 +257,8 @@ class Term_abs():
                     tail_children.extend(tail.children())
                 interp_tail = []
                 for c in tail_children:
-                    print(c)
                     if z3.is_app(c) and c.decl().kind() == z3.Z3_OP_UNINTERPRETED and c.decl().range() == z3.BoolSort(self._ctx):
                         new_c = self.get_new_pred_for(c.decl())
-                        print(c)
-                        print(c.decl())
-                        print(new_c)
                         if new_c:
                             vars = []
                             new_var_sorts = new_c.get_sorts()
@@ -272,20 +285,29 @@ class Term_abs():
                     new_assertions.append(new_assertion)
                 else:
                     new_assertions.append(a)
+        assert(len(self._assertions) == len(new_assertions))
+        temp_preds = []
+        for f in new_assertions:
+            temp_preds.extend(get_preds(f, self._ctx))
+        temp_preds = list(dict.fromkeys(temp_preds))
+        assert(len(temp_preds) == len(self._preds))
         self._assertions = new_assertions
 
 
 def processDir (root):
     '''Recursively process all files in the root directory'''
-    os.mkdir("bench")
+    os.mkdir("termabs")
     for root, dirs, files in os.walk(root):
         for name in files:
+            if not name.endswith(".smt2"):
+                continue
             _, folder_name = os.path.split(root)
             bench_name = folder_name + "-" +name
             out_file = open("termabs/"+bench_name, 'w+')
             processFile(os.path.join(root, name), out_file)
 
 def processFile(fname, out_file = sys.stdout):
+    print("processing " + fname)
     p = Term_abs(fname)
     p.do_term_abs()
     out_file.write(p.bench_str())
