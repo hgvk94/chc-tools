@@ -246,7 +246,10 @@ class Preds():
                 new_literals.append(eq)
 
             if new_literals:
-                new_tail = z3.And(*new_literals, tail)
+                if z3.is_and(tail):
+                    new_tail = z3.And(*new_literals, *tail.children())
+                else:
+                    new_tail = z3.And(*new_literals, tail)
                 new_clause = z3.Implies(new_tail, head)
                 new_assertion = z3.ForAll(vs, new_clause)
                 new_assertions.append(new_assertion)
