@@ -78,8 +78,18 @@ def contains_rf_arg(p, rfs, ctx):
         for rf in rfs:
             if rf.domain(0) == d:
                 return True
+            elif is_record_type(d):
+                c = d.constructor(0).arity()
+                for f in range(c):
+                    if d.constructor(0).domain(f) == rf.domain(0):
+                        return True
     return False
 
+#check whether c is a record type
+def is_record_type(c):
+    if not c.kind() == z3.Z3_DATATYPE_SORT:
+        return False
+    return c.num_constructors() == 1
 #Matches a predicate with a new abstract predicate
 #contains all the literals required for term abstraction
 class abs_pred():
@@ -88,6 +98,7 @@ class abs_pred():
         self._pred = pred
         self._abstractions = []
         self._original_args = []
+        self._record_abs = []
         for i in range(pred.arity()):
             self._original_args.append(pred.domain(i))
         for (i, f) in enumerate(self._original_args):
@@ -95,22 +106,32 @@ class abs_pred():
                 for rf in rfs:
                     if rf.domain(0) == f:
                         self._abstractions.append((rf, i))
+                if is_record_type(f):
+                    for rf in rfs:
+                        cons = f.constructor(0)
+                        num_args = cons.arity()
+                        for cons_n in range(num_args):
+                            a = cons.domain(cons_n)
+                            if rf.domain(0) == a:
+                                selector = f.accessor(0, cons_n)
+                                self._record_abs.append((rf, i, selector))
         domain = []
         domain.extend(self._original_args)
         domain.extend([f.range() for (f, _) in self._abstractions])
+        domain.extend([f.range() for (f, _, _) in self._record_abs])
         self._new_pred = z3.Function(pred.name() + "-abs", *domain, z3.BoolSort(self._ctx))
 
     def get_sorts(self):
-        return [f.range() for (f, _) in self._abstractions]
+        return [f.range() for (f, _) in self._abstractions] + [f.range() for (f, _, _) in self._record_abs]
 
     def mk_new_pred(self, args, new_vars):
-        assert(len(new_vars) == len(self._abstractions))
+        assert(len(new_vars) == len(self._abstractions) + len(self._record_abs))
         new_args = [*args, *new_vars]
         return self._new_pred(*new_args)
 
     def mk_body(self, args, new_vars, rf_pred_map):
         assert(len(args) == len(self._original_args))
-        assert(len(new_vars) == len(self._abstractions))
+        assert(len(new_vars) == len(self._abstractions) + len(self._record_abs))
         body = []
         for (j, (f, i)) in enumerate(self._abstractions):
             lhs = f(args[i])
@@ -119,6 +140,15 @@ class abs_pred():
             body.append(eq)
             rf_pred = rf_pred_map[f]
             lit = rf_pred(args[i], rhs)
+            body.append(lit)
+        for (j, (f, i, sel)) in enumerate(self._record_abs):
+            simp = z3.simplify(sel(args[i]))
+            lhs = f(simp)
+            rhs = new_vars[j]
+            eq = lhs == rhs
+            body.append(eq)
+            rf_pred = rf_pred_map[f]
+            lit = rf_pred(simp, rhs)
             body.append(lit)
         return body
 
