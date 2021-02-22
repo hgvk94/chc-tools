@@ -152,6 +152,12 @@ class abs_pred():
             body.append(lit)
         return body
 
+#check whether any string in l is contained within a
+def contains(a, l):
+    for s in l:
+        if s in a:
+            return True
+    return False
 
 class Term_abs():
     def __init__(self, fname):
@@ -162,6 +168,7 @@ class Term_abs():
         self._new_preds = []
         self._adts = []
         self._rf_preds = []
+        self._redundant_preds = []
         self._assertions = self._fp.get_assertions()
         self._rfs = []
         for a in self._assertions:
@@ -192,7 +199,8 @@ class Term_abs():
                 if z3.is_and(tail) and tail.num_args() == 1:
                     tail = tail.arg(0)
                 if z3.is_app(head) and z3.is_app(tail) and set(tail.children()) == set(head.children()):
-                    strange_clauses.append((head.decl(), tail.decl()))
+                    if head.decl().arity() == 2 and is_recursive_adt(head.decl().domain(0)):
+                        strange_clauses.append((head.decl(), tail.decl()))
         return strange_clauses
 
     #populate _preds with all the predicates in the CHC
@@ -234,6 +242,24 @@ class Term_abs():
                                 for (h, b) in redundant_clauses:
                                     if b == pred and h == tail_preds[0]:
                                         self._rf_preds.append(h)
+                                        self._redundant_preds.append(b)
+        #_rf_preds contain all predicates that that have a rule of the form A(x) && Tr ==> A(x') or
+        # a set of rules of the form A(x) && Tr ==> B(x') B(x') ==> A(x')
+        # now we filter them by the name of the predicate because we know the list of all rf appearing in the benchmarks
+        #This step can be merged with populate_rf_pred_map
+        tmp_rf = []
+        tmp_red = []
+        for p in self._rf_preds:
+            for f in self._rfs:
+                if p.name() in RF_PREDS[f.name()]:
+                    tmp_rf.append(p)
+                    break
+        self._rf_preds = tmp_rf
+        rf_names = [f.name() for f in self._rfs]
+        for p in self._redundant_preds:
+            if contains(p.name(), rf_names):
+                tmp_red.append(p)
+        self._redundant_preds = tmp_red
 
     def get_new_pred_for(self, pred):
         for p in self._new_preds:
@@ -242,7 +268,7 @@ class Term_abs():
         return None
 
     def should_create_new_pred(self, p):
-        if p in self._rf_preds:
+        if p in self._rf_preds or p in self._redundant_preds:
             return False
         if not contains_rf_arg(p, self._rfs, self._ctx):
             return False
