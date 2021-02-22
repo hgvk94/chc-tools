@@ -20,6 +20,14 @@ def is_recursive_adt(dt):
             if arg_sort == dt:
                 return True
     return False
+
+#check whether any element in ls is contained in s
+def contains(s, ls):
+    for a in ls:
+        if a in s:
+            return True
+    return False
+
 #from horndb
 def ground_quantifier(qexpr):
     body = qexpr.body()
@@ -212,7 +220,7 @@ class Preds():
                 self.conjoin_rf(res, f._PREDS)
 
     def add_rf(self, RF_PREDS, create_rf):
-        for pred in self._rf_preds:
+        for pred in self._preds:
             if pred.name() in RF_PREDS:
                 assert(pred.arity() == 2)
                 if pred.domain(0).kind() == z3.Z3_DATATYPE_SORT:
@@ -238,7 +246,8 @@ class Preds():
             head = clause.arg(1)
             tail = clause.arg(0)
             #Skip clauses whose head is RF
-            if z3.is_app(head) and head.decl().name() in RF_PREDS:
+            #also skip if head is an auxiliary predicate used to define RF
+            if z3.is_app(head) and contains(head.decl().name(), RF_PREDS):
                 new_assertions.append(a)
                 continue
             new_literals = []
