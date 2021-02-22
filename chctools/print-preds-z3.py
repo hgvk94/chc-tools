@@ -118,12 +118,27 @@ def create_length_rf(list_sort, ret_sort, ctx):
     z3.RecAddDefinition(length, x, z3.If(x == nil_cons(), 0, 1 + length(tail_sel(x)), ctx=ctx))
     return length
 
-def create_prod_rf(list_sort, ret_sort, ctx):
+def create_prod_list_rf(list_sort, ret_sort, ctx):
     prod = z3.RecFunction('prod', list_sort, ret_sort)
     x = z3.Const('x', list_sort)
     nil_cons, head_sel, tail_sel = get_list_csr(list_sort)
     z3.RecAddDefinition(prod, x, z3.If(x == nil_cons(), 0, head_sel(x) * prod(tail_sel(x)), ctx=ctx))
     return prod
+
+def create_prod_tree_rf(tree_sort, ret_sort, ctx):
+    prod = z3.RecFunction('prod', tree_sort, ret_sort)
+    x = z3.Const('x', tree_sort)
+    nil_cons, lc_sel, rc_sel, val_sel = get_tree_csr(tree_sort)
+    z3.RecAddDefinition(prod, x, z3.If(x == nil_cons(), 0, val_sel(x) * prod(lc_sel(x)) * prod(rc_sel(x)), ctx=ctx))
+    return prod
+
+def create_prod_rf(sort, ret_sort, ctx):
+    if "list" in sort.name().lower():
+        return create_prod_list_rf(sort, ret_sort, ctx)
+    elif "tree" in sort.name().lower():
+        return create_prod_tree_rf(sort, ret_sort, ctx)
+    else:
+        assert(False)
 
 def create_sum_rf(sort, ret_sort, ctx):
     if "list" in sort.name().lower():
