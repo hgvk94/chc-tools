@@ -513,6 +513,31 @@ object LIAArraysChecker extends AbstractLIAChecker {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+
+object ADTChecker extends AbstractChecker {
+
+  val nonADTSorts = Set("Int", "Bool", "Real")
+
+  def isPossibleSort(s : Sort) = s match {
+    case s : CompositeSort if (printer print s.identifier_) == "Array" =>
+      false
+    case s : Sort =>
+      !(nonADTSorts contains (printer print s))
+  }
+
+  override val AcceptedSort : SMTLIBElement = new SMTLIBElement {
+    def check(t : AnyRef) : Boolean = t match {
+      case s : Sort =>
+        isPossibleSort(s)
+      case _ =>
+        false
+    }
+  }
+
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class AbstractLRAChecker extends AbstractChecker {
 
   val possibleSorts = Set("Real", "Bool")
