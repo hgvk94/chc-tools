@@ -149,6 +149,7 @@ class AbstractChecker {
     setInfoSeq ++
     SetLogic.asSeq ++
     setInfoSeq ++
+    DtDecl.asSeq.* ++
     FunDecl.asSeq.* ++
     (CHCAssertClause | CHCAssertFact).asSeq.* ++
     CHCQuery.asSeq ++
@@ -215,6 +216,23 @@ class AbstractChecker {
   object CheckSat extends SMTLIBElement {
     def check(t : AnyRef) : Boolean = t match {
       case c : CheckSatCommand =>
+        true
+      case _ =>
+        false
+    }
+  }
+
+  object DtDecl extends SMTLIBElement {
+    def check(t : AnyRef) : Boolean = t match {
+      case c : DataDeclCommand  =>
+        val funcs = dtDeclVisitor.visit(c, ());
+        // println("added " + funcs);
+        interpretedFunctions = interpretedFunctions ++ funcs;
+        true
+      case c : DataDeclsCommand =>
+        val funcs = dtDeclVisitor.visit(c, ());
+        // println("added " + funcs);
+        interpretedFunctions = interpretedFunctions ++ funcs;
         true
       case _ =>
         false
@@ -392,7 +410,7 @@ class AbstractChecker {
 
   //////////////////////////////////////////////////////////////////////////////
 
-  val interpretedFunctions =
+  var interpretedFunctions =
     Set("not", "and", "or", "=>", "true", "false",
         "ite",
         "=", "distinct", "<", ">", "<=", ">=",
@@ -422,6 +440,29 @@ class AbstractChecker {
         }
       }
     }
+  }
+
+  object dtDeclVisitor extends FoldVisitor[Set[String], Unit] {
+    def leaf(arg : Unit) = Set[String]()
+    def combine(x : Set[String], y : Set[String], arg : Unit) = x ++ y
+
+    override def visit(p : NullConstructorDecl, arg : Unit) = {
+      Set((printer print p.symbol_))
+      //TODO: add recognizer
+    }
+
+    override def visit(p : ConstructorDecl, arg : Unit) = {
+      super.visit(p, arg) + (printer print p.symbol_)
+      //TODO: add recognizer
+    }
+
+    override def visit(p : SelectorDecl, arg : Unit) = {
+      super.visit(p, arg) + (printer print p.symbol_)
+    }
+
+    // override def visit(p : PolySortC, arg : Unit) = {
+    //   assert false
+    // }
   }
 
   val constantCtorFunctions =
@@ -516,7 +557,7 @@ object LIAArraysChecker extends AbstractLIAChecker {
 
 object ADTChecker extends AbstractChecker {
 
-  val nonADTSorts = Set("Int", "Bool", "Real")
+  val nonADTSorts = Set("Int", "Real")
 
   def isPossibleSort(s : Sort) = s match {
     case s : CompositeSort if (printer print s.identifier_) == "Array" =>
