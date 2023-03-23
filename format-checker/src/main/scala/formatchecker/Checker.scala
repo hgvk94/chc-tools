@@ -225,15 +225,9 @@ class AbstractChecker {
   object DtDecl extends SMTLIBElement {
     def check(t : AnyRef) : Boolean = t match {
       case c : DataDeclCommand  =>
-        val funcs = dtDeclVisitor.visit(c, ());
-        // println("added " + funcs);
-        interpretedFunctions = interpretedFunctions ++ funcs;
-        true
+        !dtDeclVisitor.visit(c, ())
       case c : DataDeclsCommand =>
-        val funcs = dtDeclVisitor.visit(c, ());
-        // println("added " + funcs);
-        interpretedFunctions = interpretedFunctions ++ funcs;
-        true
+        !dtDeclVisitor.visit(c, ())
       case _ =>
         false
     }
@@ -410,6 +404,8 @@ class AbstractChecker {
 
   //////////////////////////////////////////////////////////////////////////////
 
+  var dtSorts = Set[String]()
+
   var interpretedFunctions =
     Set("not", "and", "or", "=>", "true", "false",
         "ite",
@@ -442,27 +438,31 @@ class AbstractChecker {
     }
   }
 
-  object dtDeclVisitor extends FoldVisitor[Set[String], Unit] {
-    def leaf(arg : Unit) = Set[String]()
-    def combine(x : Set[String], y : Set[String], arg : Unit) = x ++ y
+  object dtDeclVisitor extends FoldVisitor[Boolean, Unit] {
+    def leaf(arg : Unit) = false
+    def combine(x : Boolean, y : Boolean, arg : Unit) = x || y
+    //for constructor c, we add the following testers: (_ is c) is-c. The first is defined in SMTLIB and the second is used in Princess
+    def testers(c : ap.parser.smtlib.Absyn.Symbol) = Set("is-" + (printer print c), "(_ is " + (printer print c) +")")
 
     override def visit(p : NullConstructorDecl, arg : Unit) = {
-      Set((printer print p.symbol_))
-      //TODO: add recognizer
+      interpretedFunctions = interpretedFunctions ++ testers(p.symbol_) + (printer print p.symbol_);
+      false
     }
 
     override def visit(p : ConstructorDecl, arg : Unit) = {
-      super.visit(p, arg) + (printer print p.symbol_)
-      //TODO: add recognizer
+      interpretedFunctions = interpretedFunctions ++ testers(p.symbol_) + (printer print p.symbol_);
+      false
     }
 
     override def visit(p : SelectorDecl, arg : Unit) = {
-      super.visit(p, arg) + (printer print p.symbol_)
+      interpretedFunctions = interpretedFunctions + (printer print p.symbol_);
+      false
     }
 
-    // override def visit(p : PolySortC, arg : Unit) = {
-    //   assert false
-    // }
+    override def visit(p : PolySort, arg : Unit) = {
+      dtSorts = dtSorts + (printer print p.symbol_)
+      p.numeral_ != "0"
+    }
   }
 
   val constantCtorFunctions =
@@ -557,13 +557,13 @@ object LIAArraysChecker extends AbstractLIAChecker {
 
 object ADTChecker extends AbstractChecker {
 
-  val nonADTSorts = Set("Int", "Real")
+  var possibleSorts = Set("Bool")
 
   def isPossibleSort(s : Sort) = s match {
     case s : CompositeSort if (printer print s.identifier_) == "Array" =>
       false
     case s : Sort =>
-      !(nonADTSorts contains (printer print s))
+      (possibleSorts ++ dtSorts) contains (printer print s)
   }
 
   override val AcceptedSort : SMTLIBElement = new SMTLIBElement {
