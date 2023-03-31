@@ -555,9 +555,9 @@ object LIAArraysChecker extends AbstractLIAChecker {
 ////////////////////////////////////////////////////////////////////////////////
 
 
-object ADTChecker extends AbstractChecker {
+object ADTLIAChecker extends AbstractChecker {
 
-  var possibleSorts = Set("Bool")
+  var possibleSorts = Set("Int", "Bool")
 
   def isPossibleSort(s : Sort) = s match {
     case s : CompositeSort if (printer print s.identifier_) == "Array" =>
