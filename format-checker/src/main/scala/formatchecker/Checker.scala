@@ -151,7 +151,6 @@ class AbstractChecker {
     SetLogic.asSeq ++
     setInfoSeq ++
     DtDecl.asSeq.* ++
-    // FunDef.asSeq.* ++
     FunDecl.asSeq.* ++
     (CHCAssertClause | CHCAssertFact).asSeq.* ++
     CHCQuery.asSeq ++
@@ -230,18 +229,6 @@ class AbstractChecker {
         !dtDeclVisitor.visit(c, ())
       case c : DataDeclsCommand =>
         !dtDeclVisitor.visit(c, ())
-      case _ =>
-        false
-    }
-  }
-
-  //TODO: visit body of function as well to double check that there are only accepted sorts
-  object FunDef extends SMTLIBElement {
-    def check(t : AnyRef) : Boolean = t match {
-      case c :  FunctionDefCommand  =>
-        interpretedFunctions = interpretedFunctions + (printer print c.symbol_);
-        AcceptedSort.check(c.sort_) &&
-        VarDecl.asSeq.+.checkJavaList(c.listesortedvarc_)
       case _ =>
         false
     }
