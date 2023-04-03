@@ -6,6 +6,7 @@ import ap.parser.smtlib.Absyn._
 
 import scala.{Option => SOption}
 import scala.collection.JavaConverters._
+import scala.util.matching.Regex
 
 /**
  * Verify that an SMT-LIB script is in the CHC-COMP fragment.
@@ -150,6 +151,7 @@ class AbstractChecker {
     SetLogic.asSeq ++
     setInfoSeq ++
     DtDecl.asSeq.* ++
+    // FunDef.asSeq.* ++
     FunDecl.asSeq.* ++
     (CHCAssertClause | CHCAssertFact).asSeq.* ++
     CHCQuery.asSeq ++
@@ -228,6 +230,18 @@ class AbstractChecker {
         !dtDeclVisitor.visit(c, ())
       case c : DataDeclsCommand =>
         !dtDeclVisitor.visit(c, ())
+      case _ =>
+        false
+    }
+  }
+
+  //TODO: visit body of function as well to double check that there are only accepted sorts
+  object FunDef extends SMTLIBElement {
+    def check(t : AnyRef) : Boolean = t match {
+      case c :  FunctionDefCommand  =>
+        interpretedFunctions = interpretedFunctions + (printer print c.symbol_);
+        AcceptedSort.check(c.sort_) &&
+        VarDecl.asSeq.+.checkJavaList(c.listesortedvarc_)
       case _ =>
         false
     }
@@ -345,6 +359,7 @@ class AbstractChecker {
   object PredAtom extends SMTLIBElement {
     def check(t : AnyRef) : Boolean = t match {
       case c : FunctionTerm =>
+        println("printing interpreted function inside PredAtom " + interpretedFunctions);
         !(interpretedFunctions contains (printer print c.symbolref_)) &&
         VarExpression.asSeq.*.checkJavaList(c.listterm_)
       case c : NullaryTerm
@@ -405,6 +420,8 @@ class AbstractChecker {
   //////////////////////////////////////////////////////////////////////////////
 
   var dtSorts = Set[String]()
+  var dtUsedSorts : String = ""
+  var recursiveDtSorts = Set[String]()
 
   var interpretedFunctions =
     Set("not", "and", "or", "=>", "true", "false",
@@ -431,7 +448,7 @@ class AbstractChecker {
           // denominator has to be constant
           p.listterm_.get(1).accept(ConstantTermVisitor, ())
         case _ => {
-//          println("did not recognise as interpreted: " + (printer print p))
+          println("did not recognise as interpreted: " + (printer print p))
           false
         }
       }
@@ -451,11 +468,12 @@ class AbstractChecker {
 
     override def visit(p : ConstructorDecl, arg : Unit) = {
       interpretedFunctions = interpretedFunctions ++ testers(p.symbol_) + (printer print p.symbol_);
-      false
+      super.visit(p, arg)
     }
 
     override def visit(p : SelectorDecl, arg : Unit) = {
       interpretedFunctions = interpretedFunctions + (printer print p.symbol_);
+      dtUsedSorts = dtUsedSorts + (printer print p.sort_)
       false
     }
 
@@ -464,6 +482,7 @@ class AbstractChecker {
       p.numeral_ != "0"
     }
   }
+
 
   val constantCtorFunctions =
     Set("+", "-", "*", "mod", "div", "abs", "/", "select", "store")
@@ -558,12 +577,41 @@ object LIAArraysChecker extends AbstractLIAChecker {
 object ADTLIAChecker extends AbstractChecker {
 
   var possibleSorts = Set("Int", "Bool")
+  val arrayPattern : Regex = ".*Array.*".r
 
   def isPossibleSort(s : Sort) = s match {
     case s : CompositeSort if (printer print s.identifier_) == "Array" =>
       false
     case s : Sort =>
-      (possibleSorts ++ dtSorts) contains (printer print s)
+      (possibleSorts contains (printer print s)) ||
+      (dtSorts.contains((printer print s)) && arrayPattern.findFirstIn(dtUsedSorts) == None)
+  }
+
+  override val AcceptedSort : SMTLIBElement = new SMTLIBElement {
+    def check(t : AnyRef) : Boolean = t match {
+      case s : Sort =>
+        isPossibleSort(s)
+      case _ =>
+        false
+    }
+  }
+
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+//TODO: implement check for recursion
+object LIAADTArraysChecker extends AbstractChecker {
+
+  var possibleSorts = Set("Int", "Bool")
+
+  def isPossibleSort(s : Sort) : Boolean = s match {
+    case s : CompositeSort
+        if (printer print s.identifier_) == "Array" &&
+           s.listsort_.size == 2 =>
+      s.listsort_.asScala forall isPossibleSort
+    case s =>
+      ((possibleSorts ++ dtSorts) contains (printer print s)) // && !(recursiveDtSorts contains (printer print s))
   }
 
   override val AcceptedSort : SMTLIBElement = new SMTLIBElement {
