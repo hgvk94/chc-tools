@@ -32,7 +32,7 @@
 (assert (forall ((x_0 MutInt_0) (x_1 Bool))
 	(=> (justrec_1 x_0 x_1)
 	    (justrec_0 x_0))))
-(assert (forall ((x_2 MutInt_0) (x_3 Nat_0) (f Bool) (t Nat_0) (x_4 Nat_0) (x_5 Nat_0) (x_34 Nat_0) (x_35 Nat_0))
+(assert (forall ((x_2 MutInt_0) (x_3 Nat_0) (f Bool) (t MutInt_0) (x_4 Nat_0) (x_5 Nat_0) (x_34 Nat_0) (x_35 Nat_0))
 	(=>	(and
     			(retInt_1 x_34 x_2)
 			(curInt_1 x_35 x_2)
@@ -50,7 +50,7 @@
             (= t true)
             )
 		(justrec_1 x_6 t))))
-(assert (forall ((x_7 Bool) (x_8 Nat_0) (x_9 Nat_0) (t2 Bool) (t Nat_0) (x_10 Nat_0) (x_14 Bool))
+(assert (forall ((x_7 Bool) (x_8 Nat_0) (x_9 Nat_0) (t2 Bool) (t MutInt_0) (x_10 Nat_0) (x_14 Bool))
 	(=>	(and (justrec_0 t)
     	    (main_1 x_14 x_7)
 			(gt_0 x_8 x_9)
