@@ -422,8 +422,11 @@ class AbstractChecker {
     def combine(x : Boolean, y : Boolean, arg : Unit) = x && y
     override def visit(p : FunctionTerm, arg : Unit) = {
       p.symbolref_ match {
-//        case r : CastIdentifierRef if (printer print r.identifier_) == "const" =>
-//          super.visit(p, arg)
+        case r : CastIdentifierRef if (printer print r.identifier_) == "const" =>
+          (p.listterm_.asScala forall {
+            t => t.accept(ConstantTermVisitor, ())
+          })
+          super.visit(p, arg)
         case r if (interpretedFunctions contains (printer print r)) =>
           super.visit(p, arg)
         case r if (printer print r) == "*" =>
@@ -450,6 +453,7 @@ class AbstractChecker {
 
     override def visit(p : NullConstructorDecl, arg : Unit) = {
       interpretedFunctions = interpretedFunctions ++ testers(p.symbol_) + (printer print p.symbol_);
+      constantCtorFunctions = constantCtorFunctions + (printer print p.symbol_);
       false
     }
 
@@ -471,7 +475,7 @@ class AbstractChecker {
   }
 
 
-  val constantCtorFunctions =
+  var constantCtorFunctions =
     Set("+", "-", "*", "mod", "div", "abs", "/", "select", "store")
 
   object ConstantTermVisitor extends FoldVisitor[Boolean, Unit] {
@@ -481,7 +485,8 @@ class AbstractChecker {
     override def visit(p : FunctionTerm, arg : Unit) =
       constantCtorFunctions contains (printer print p.symbolref_)
     override def visit(p : NullaryTerm, arg : Unit) = false
-
+    override def visit(p: CastIdentifierRef, arg: Unit) =
+      p.identifier_ == "const"
     override def visit(p : NumConstant, arg : Unit) = true
     override def visit(p : RatConstant, arg : Unit) = true
     override def visit(p : HexConstant, arg : Unit) = true

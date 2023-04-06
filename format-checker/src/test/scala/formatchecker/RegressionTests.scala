@@ -67,6 +67,7 @@ class RegressionTests extends FlatSpec {
   testFile("chc-adt-nonlin-000.smt2", ADTLIA = true)
   testFile("chc-adt-nonlin-001.smt2", ADTLIA = true)
   testFile("chc-adt-tricera-000.smt2", LIAADTArrays = true)
+  testFile("chc-adt-tricera-001.smt2", LIAADTArrays = true)
   testFile("chc-adt-solidity-000.smt2", LIAADTArrays = true)
   testFile("chc-lra-0002.smt2", LRA = true, LRATS = true)
   testFile("chc-lia-lin-arr-0000-fixed.smt2", LIALinArrays = true)

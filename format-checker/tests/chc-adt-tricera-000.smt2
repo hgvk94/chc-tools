@@ -19,7 +19,7 @@
   (forall ( (v_0 Heap) )
     (=>
       (and
-        (and true) ;; (= v_0 (HeapCtor 0 ((as const (Array Int HeapObject)) defObj)))
+        (and true (= v_0 (HeapCtor 0 ((as const (Array Int HeapObject)) defObj))))
       )
       (inv_main2 v_0)
     )
