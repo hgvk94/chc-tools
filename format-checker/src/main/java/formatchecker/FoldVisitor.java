@@ -167,9 +167,9 @@ public abstract class FoldVisitor<R,A> implements AllVisitor<R,A> {
       }
       return r;
     }
-    /*WARNING: this is just a stub to make compiler happy. TODO: Implement*/
     public R visit(ap.parser.smtlib.Absyn.SimplifyCommand p, A arg) {
       R r = leaf(arg);
+      r = combine(p.term_.accept(this, arg), r, arg);
       return r;
     }
     /*WARNING: this is just a stub to make compiler happy. TODO: Implement*/
@@ -402,7 +402,6 @@ public abstract class FoldVisitor<R,A> implements AllVisitor<R,A> {
       R r = leaf(arg);
       return r;
     }
-    /*WARNING: this is just a stub to make compiler happy. TODO: Implement*/
     public R visit(ap.parser.smtlib.Absyn.LbdQuantifier p, A arg) {
       R r = leaf(arg);
       return r;
